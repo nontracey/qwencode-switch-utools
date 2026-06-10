@@ -81,6 +81,20 @@ function renderList() {
       switchToConfig(providerType, index);
     });
   });
+
+  // 操作按钮事件委托
+  document.querySelectorAll('.config-actions [data-action]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const card = btn.closest('.config-card');
+      const providerType = card.dataset.provider;
+      const index = parseInt(card.dataset.index);
+      const action = btn.dataset.action;
+      if (action === 'edit') openEditModal(providerType, index);
+      else if (action === 'duplicate') duplicateConfig(providerType, index);
+      else if (action === 'delete') openDeleteModal(providerType, index);
+    });
+  });
 }
 
 function renderCard(cfg) {
@@ -90,11 +104,8 @@ function renderCard(cfg) {
     : '';
   const shortUrl = cfg.baseUrl.length > 40 ? cfg.baseUrl.slice(0, 40) + '...' : cfg.baseUrl;
 
-  // 用 data-provider + data-index 精确定位，不再依赖数组下标
-  const key = `'${cfg.providerType}', ${cfg.index}`;
-
   return `
-    <div class="config-card ${activeClass}" data-index="${cfg.index}" data-provider="${cfg.providerType}">
+    <div class="config-card ${activeClass}" data-index="${cfg.index}" data-provider="${escapeHtml(cfg.providerType)}">
       <div class="config-card-header">
         <div class="config-radio ${activeClass}"></div>
         <div class="config-info">
@@ -115,9 +126,9 @@ function renderCard(cfg) {
           </div>
         </div>
         <div class="config-actions">
-          <button class="btn-icon primary" onclick="event.stopPropagation(); openEditModal(${key})" title="编辑">&#x270E;</button>
-          <button class="btn-icon" onclick="event.stopPropagation(); duplicateConfig(${key})" title="复制">&#x1F4CB;</button>
-          <button class="btn-icon danger" onclick="event.stopPropagation(); openDeleteModal(${key})" title="删除">&#x1F5D1;</button>
+          <button class="btn-icon primary" data-action="edit" title="编辑">&#x270E;</button>
+          <button class="btn-icon" data-action="duplicate" title="复制">&#x1F4CB;</button>
+          <button class="btn-icon danger" data-action="delete" title="删除">&#x1F5D1;</button>
         </div>
       </div>
       <div class="config-detail">
@@ -396,3 +407,16 @@ document.getElementById('deleteModalOverlay').addEventListener('click', (e) => {
 });
 
 document.getElementById('searchInput').addEventListener('keyup', () => renderList());
+
+// API Key 显示/隐藏切换
+function toggleApiKeyVisibility() {
+  const input = document.getElementById('formApiKey');
+  const btn = document.getElementById('toggleApiKeyBtn');
+  if (input.type === 'password') {
+    input.type = 'text';
+    btn.textContent = '隐藏';
+  } else {
+    input.type = 'password';
+    btn.textContent = '显示';
+  }
+}

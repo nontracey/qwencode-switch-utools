@@ -15,8 +15,7 @@ function readSettings() {
 function writeSettings(settings) {
   const raw = JSON.stringify(settings, null, 2) + '\n';
   fs.writeFileSync(SETTINGS_PATH, raw, 'utf-8');
-  // 同步写入备份
-  fs.writeFileSync(SETTINGS_ORIG_PATH, raw, 'utf-8');
+  // 不覆盖 .orig，那是 Qwen Code 自己管理的备份
 }
 
 // ====== 模型配置管理 ======
@@ -148,10 +147,8 @@ function addConfig({ name, modelId, baseUrl, envKey, apiKey, generationConfig })
   if (!settings.modelProviders.openai) settings.modelProviders.openai = [];
   if (!settings.env) settings.env = {};
 
-  // 检查是否有同名配置
-  const existing = settings.modelProviders.openai.find(
-    item => item.name === name || (item.id === modelId && item.baseUrl === baseUrl)
-  );
+  // 检查是否有同名配置（名称是唯一标识，同端点同模型ID但不同参数是允许的）
+  const existing = settings.modelProviders.openai.find(item => item.name === name);
   if (existing) {
     return { success: false, error: `配置 "${name}" 已存在` };
   }
@@ -258,11 +255,11 @@ function duplicateConfig(providerType, index) {
 
   const source = items[index];
   const newName = source.name + ' (副本)';
-  const newId = source.id + '-copy';
 
   const newConfig = JSON.parse(JSON.stringify(source));
   newConfig.name = newName;
-  newConfig.id = newId;
+  // 保持原 id 不变，复制的目的是在同一端点下改模型参数
+  // 用户可自行在编辑中修改 id
 
   items.push(newConfig);
   writeSettings(settings);
