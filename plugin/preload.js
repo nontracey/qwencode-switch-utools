@@ -4,6 +4,7 @@ const path = require('path');
 const QWEN_HOME = path.join(require('os').homedir(), '.qwen');
 const SETTINGS_PATH = path.join(QWEN_HOME, 'settings.json');
 const SETTINGS_ORIG_PATH = path.join(QWEN_HOME, 'settings.json.orig');
+const META_PATH = path.join(QWEN_HOME, 'qwenswitch-meta.json');
 
 // ====== 配置读取与写入 ======
 
@@ -15,7 +16,68 @@ function readSettings() {
 function writeSettings(settings) {
   const raw = JSON.stringify(settings, null, 2) + '\n';
   fs.writeFileSync(SETTINGS_PATH, raw, 'utf-8');
-  // 不覆盖 .orig，那是 Qwen Code 自己管理的备份
+}
+
+// ====== 元数据持久化（分组昵称、排序、折叠状态） ======
+
+function readMeta() {
+  try {
+    if (!fs.existsSync(META_PATH)) return { groups: {} };
+    const raw = fs.readFileSync(META_PATH, 'utf-8');
+    return JSON.parse(raw);
+  } catch {
+    return { groups: {} };
+  }
+}
+
+function writeMeta(meta) {
+  const raw = JSON.stringify(meta, null, 2) + '\n';
+  fs.writeFileSync(META_PATH, raw, 'utf-8');
+}
+
+/**
+ * 获取分组元数据
+ * groups[baseUrl] = { nickname, order, collapsed }
+ */
+function getGroupMeta() {
+  return readMeta().groups || {};
+}
+
+function setGroupMeta(groups) {
+  writeMeta({ groups });
+}
+
+/**
+ * 更新单个分组的元数据
+ */
+function updateGroupMeta(baseUrl, patch) {
+  const meta = readMeta();
+  if (!meta.groups) meta.groups = {};
+  if (!meta.groups[baseUrl]) meta.groups[baseUrl] = {};
+  Object.assign(meta.groups[baseUrl], patch);
+  writeMeta(meta);
+  return meta.groups[baseUrl];
+}
+
+/**
+ * 获取某个端点下已有配置的公共信息（用于快捷创建时预填）
+ * 取该端点下第一个配置的 baseUrl、envKey、apiKey
+ */
+function getGroupDefaults(baseUrl) {
+  const settings = readSettings();
+  const providers = settings.modelProviders || {};
+  for (const [, items] of Object.entries(providers)) {
+    if (!Array.isArray(items)) continue;
+    const found = items.find(item => item.baseUrl === baseUrl);
+    if (found) {
+      return {
+        baseUrl: found.baseUrl,
+        envKey: found.envKey,
+        apiKey: (settings.env || {})[found.envKey] || '',
+      };
+    }
+  }
+  return null;
 }
 
 // ====== 模型配置管理 ======
@@ -314,4 +376,8 @@ window.__qwenswitch = {
   getEnvVars,
   readSettings,
   getDefaultGenConfig,
+  getGroupMeta,
+  setGroupMeta,
+  updateGroupMeta,
+  getGroupDefaults,
 };

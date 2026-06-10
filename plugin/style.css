@@ -221,6 +221,36 @@ body {
   user-select: none;
 }
 
+.config-group-header .group-drag-handle {
+  cursor: grab;
+  font-size: 12px;
+  color: var(--text-muted);
+  opacity: 0.4;
+  transition: opacity var(--transition);
+  padding: 2px;
+}
+
+.config-group-header .group-drag-handle:hover {
+  opacity: 1;
+  color: var(--text-secondary);
+}
+
+.config-group-header .group-drag-handle:active {
+  cursor: grabbing;
+}
+
+.config-group-header .group-collapse-btn {
+  cursor: pointer;
+  font-size: 10px;
+  color: var(--text-muted);
+  transition: color var(--transition);
+  padding: 2px;
+}
+
+.config-group-header .group-collapse-btn:hover {
+  color: var(--text-secondary);
+}
+
 .config-group-header .group-icon {
   font-size: 13px;
   opacity: 0.7;
@@ -232,19 +262,69 @@ body {
   color: var(--text-secondary);
   font-family: 'SF Mono', 'Fira Code', monospace;
   letter-spacing: 0.3px;
+  cursor: default;
 }
 
 .has-active .config-group-header .group-label {
   color: var(--success);
 }
 
+.config-group-header .group-url-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  opacity: 0.6;
+}
+
 .config-group-header .group-count {
-  margin-left: auto;
   font-size: 11px;
   color: var(--text-muted);
   background: var(--bg-secondary);
   padding: 1px 8px;
   border-radius: 10px;
+}
+
+.config-group-header .group-quick-add,
+.config-group-header .group-edit-nickname {
+  font-size: 12px;
+  opacity: 0.4;
+  transition: opacity var(--transition);
+}
+
+.config-group-header .group-quick-add:hover,
+.config-group-header .group-edit-nickname:hover {
+  opacity: 1;
+}
+
+/* ====== 拖拽状态 ====== */
+.config-group.dragging {
+  opacity: 0.7;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  z-index: 100;
+}
+
+/* ====== 昵称编辑输入框 ====== */
+.group-nickname-input {
+  font-size: 12px !important;
+  font-family: 'SF Mono', 'Fira Code', monospace !important;
+  padding: 2px 6px !important;
+  width: 200px;
+}
+
+/* ====== 快捷创建切换 ====== */
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--primary);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 0;
+  text-decoration: underline;
+  transition: color var(--transition);
+}
+
+.btn-link:hover {
+  color: var(--primary-hover);
 }
 
 .config-group-list {

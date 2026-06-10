@@ -2,6 +2,8 @@
 let configs = [];
 let filterMode = 'all'; // 'all' | 'active'
 let editMode = null;    // null = 添加, {providerType, index} = 编辑
+let quickCreateGroup = null; // 快捷创建时预填的 baseUrl
+let dragState = null;   // 拖拽排序状态
 
 // ====== 初始化 ======
 document.addEventListener('DOMContentLoaded', () => {
@@ -20,7 +22,6 @@ function loadAndRender() {
 
 /**
  * 通过 providerType + index 精确查找配置
- * 避免排序/筛选后数组下标错位
  */
 function findConfig(providerType, index) {
   return configs.find(c => c.providerType === providerType && c.index === index) || null;
@@ -56,8 +57,16 @@ function renderList() {
     });
   }
 
-  // 组间排序：包含激活配置的组排最前，其余按端点 URL
+  // 读取分组元数据
+  const groupMeta = window.__qwenswitch.getGroupMeta();
+
+  // 组间排序：自定义 order 优先，然后激活组优先，最后按 URL
   const sortedGroups = [...groups.entries()].sort((a, b) => {
+    const aMeta = groupMeta[a[0]];
+    const bMeta = groupMeta[b[0]];
+    const aOrder = aMeta && aMeta.order !== undefined ? aMeta.order : 9999;
+    const bOrder = bMeta && bMeta.order !== undefined ? bMeta.order : 9999;
+    if (aOrder !== bOrder) return aOrder - bOrder;
     const aActive = a[1].some(c => c.enabled);
     const bActive = b[1].some(c => c.enabled);
     if (aActive !== bActive) return aActive ? -1 : 1;
@@ -80,22 +89,34 @@ function renderList() {
   }
 
   list.innerHTML = sortedGroups.map(([baseUrl, items]) => {
-    const groupLabel = baseUrl.replace(/^https?:\/\//, '').replace(/\/v\d+$/, '');
+    const meta = groupMeta[baseUrl] || {};
+    const nickname = meta.nickname || '';
+    const collapsed = meta.collapsed || false;
+    const groupLabel = nickname || baseUrl.replace(/^https?:\/\//, '').replace(/\/v\d+$/, '');
     const hasActive = items.some(c => c.enabled);
     return `
-      <div class="config-group ${hasActive ? 'has-active' : ''}">
+      <div class="config-group ${hasActive ? 'has-active' : ''} ${collapsed ? 'collapsed' : ''}" data-base-url="${escapeHtml(baseUrl)}">
         <div class="config-group-header">
+          <span class="group-drag-handle" title="拖拽排序">&#x2630;</span>
+          <span class="group-collapse-btn" data-action-group="collapse" title="${collapsed ? '展开' : '折叠'}">${collapsed ? '&#x25B6;' : '&#x25BC;'}</span>
           <span class="group-icon">&#x1F310;</span>
-          <span class="group-label">${escapeHtml(groupLabel)}</span>
+          <span class="group-label" data-action-group="nickname" title="双击编辑昵称">${escapeHtml(groupLabel)}</span>
+          ${nickname ? `<span class="group-url-hint">${escapeHtml(baseUrl.replace(/^https?:\/\//, '').replace(/\/v\d+$/, ''))}</span>` : ''}
           <span class="group-count">${items.length}</span>
+          <button class="btn-icon group-quick-add" data-action-group="quick-add" title="快捷创建">&#x2795;</button>
+          <button class="btn-icon group-edit-nickname" data-action-group="edit-nickname" title="编辑昵称">&#x270E;</button>
         </div>
-        <div class="config-group-list">
+        <div class="config-group-list" ${collapsed ? 'style="display:none"' : ''}>
           ${items.map(cfg => renderCard(cfg)).join('')}
         </div>
       </div>`;
   }).join('');
 
-  // 展开/折叠事件
+  bindListEvents();
+}
+
+function bindListEvents() {
+  // 展开/折叠卡片详情
   document.querySelectorAll('.config-card-header').forEach(el => {
     el.addEventListener('click', (e) => {
       if (e.target.closest('.config-actions')) return;
@@ -104,7 +125,7 @@ function renderList() {
     });
   });
 
-  // 切换事件
+  // 切换激活
   document.querySelectorAll('.config-radio').forEach(el => {
     el.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -128,8 +149,208 @@ function renderList() {
       else if (action === 'delete') openDeleteModal(providerType, index);
     });
   });
+
+  // 分组 header 事件委托
+  document.querySelectorAll('.config-group-header').forEach(header => {
+    header.addEventListener('click', (e) => {
+      const target = e.target.closest('[data-action-group]');
+      if (!target) return;
+      const action = target.dataset.actionGroup;
+      const group = header.closest('.config-group');
+      const baseUrl = group.dataset.baseUrl;
+
+      if (action === 'collapse') {
+        toggleGroupCollapse(baseUrl, group);
+      } else if (action === 'quick-add') {
+        openQuickAddModal(baseUrl);
+      } else if (action === 'edit-nickname') {
+        openNicknameEditor(baseUrl, group);
+      }
+    });
+
+    // 双击 label 编辑昵称
+    const label = header.querySelector('.group-label');
+    if (label) {
+      label.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
+        const group = header.closest('.config-group');
+        const baseUrl = group.dataset.baseUrl;
+        openNicknameEditor(baseUrl, group);
+      });
+    }
+  });
+
+  // 拖拽排序
+  initDragSort();
 }
 
+// ====== 折叠分组 ======
+function toggleGroupCollapse(baseUrl, groupEl) {
+  const listEl = groupEl.querySelector('.config-group-list');
+  const isCollapsed = groupEl.classList.contains('collapsed');
+
+  if (isCollapsed) {
+    groupEl.classList.remove('collapsed');
+    listEl.style.display = '';
+  } else {
+    groupEl.classList.add('collapsed');
+    listEl.style.display = 'none';
+  }
+
+  const btn = groupEl.querySelector('.group-collapse-btn');
+  btn.innerHTML = groupEl.classList.contains('collapsed') ? '&#x25B6;' : '&#x25BC;';
+  btn.title = groupEl.classList.contains('collapsed') ? '展开' : '折叠';
+
+  window.__qwenswitch.updateGroupMeta(baseUrl, { collapsed: groupEl.classList.contains('collapsed') });
+}
+
+// ====== 拖拽排序 ======
+function initDragSort() {
+  const handles = document.querySelectorAll('.group-drag-handle');
+  handles.forEach(handle => {
+    handle.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      const group = handle.closest('.config-group');
+      startDrag(group, e);
+    });
+  });
+}
+
+function startDrag(groupEl, e) {
+  const list = document.getElementById('configList');
+  const groups = [...list.querySelectorAll('.config-group')];
+  const dragIndex = groups.indexOf(groupEl);
+
+  dragState = {
+    groupEl,
+    startIndex: dragIndex,
+    startY: e.clientY,
+    moved: false,
+  };
+
+  groupEl.classList.add('dragging');
+
+  const onMouseMove = (ev) => {
+    if (!dragState) return;
+    dragState.moved = true;
+
+    const allGroups = [...list.querySelectorAll('.config-group:not(.dragging)')];
+    for (const other of allGroups) {
+      const rect = other.getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+      if (ev.clientY < midY && other.compareDocumentPosition(groupEl) & Node.DOCUMENT_POSITION_PRECEDING) {
+        list.insertBefore(groupEl, other);
+        break;
+      }
+      if (ev.clientY > midY && other.compareDocumentPosition(groupEl) & Node.DOCUMENT_POSITION_FOLLOWING) {
+        list.insertBefore(groupEl, other.nextSibling);
+        break;
+      }
+    }
+  };
+
+  const onMouseUp = () => {
+    if (!dragState) return;
+    groupEl.classList.remove('dragging');
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+
+    if (dragState.moved) {
+      const newGroups = [...list.querySelectorAll('.config-group')];
+      newGroups.forEach((g, i) => {
+        window.__qwenswitch.updateGroupMeta(g.dataset.baseUrl, { order: i });
+      });
+    }
+    dragState = null;
+  };
+
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseup', onMouseUp);
+}
+
+// ====== 昵称编辑 ======
+function openNicknameEditor(baseUrl, groupEl) {
+  const meta = window.__qwenswitch.getGroupMeta();
+  const currentNickname = (meta[baseUrl] && meta[baseUrl].nickname) || '';
+  const label = groupEl.querySelector('.group-label');
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'form-input group-nickname-input';
+  input.value = currentNickname;
+  input.placeholder = baseUrl.replace(/^https?:\/\//, '').replace(/\/v\d+$/, '');
+
+  label.replaceWith(input);
+  input.focus();
+  input.select();
+
+  const save = () => {
+    const newNickname = input.value.trim();
+    window.__qwenswitch.updateGroupMeta(baseUrl, { nickname: newNickname });
+    renderList();
+  };
+
+  input.addEventListener('blur', save);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    if (e.key === 'Escape') { input.value = currentNickname; input.blur(); }
+  });
+}
+
+// ====== 快捷创建 ======
+function openQuickAddModal(baseUrl) {
+  const defaults = window.__qwenswitch.getGroupDefaults(baseUrl);
+  if (!defaults) {
+    showToast('无法获取该端点的默认配置', 'error');
+    return;
+  }
+
+  quickCreateGroup = baseUrl;
+  editMode = null;
+  document.getElementById('modalTitle').textContent = '快捷创建';
+  document.getElementById('modalConfirmBtn').textContent = '添加';
+
+  resetForm();
+
+  document.getElementById('formBaseUrl').value = defaults.baseUrl;
+  document.getElementById('formEnvKey').value = defaults.envKey;
+  document.getElementById('formApiKey').value = defaults.apiKey;
+
+  setQuickCreateMode(true);
+
+  document.getElementById('modalOverlay').classList.add('open');
+}
+
+function setQuickCreateMode(isQuick) {
+  const baseUrlGroup = document.getElementById('formBaseUrl').closest('.form-group');
+  const apiKeyGroup = document.getElementById('formApiKey').closest('.form-group');
+  const envKeyRow = document.getElementById('formEnvKey').closest('.form-row');
+
+  if (isQuick) {
+    if (baseUrlGroup) baseUrlGroup.style.display = 'none';
+    if (apiKeyGroup) apiKeyGroup.style.display = 'none';
+    if (envKeyRow) envKeyRow.style.display = 'none';
+    document.getElementById('genConfigPanel').classList.remove('open');
+    document.getElementById('genConfigToggle').style.display = 'none';
+    document.querySelector('.help-text').style.display = 'none';
+    document.getElementById('fullCreateToggle').style.display = '';
+  } else {
+    if (baseUrlGroup) baseUrlGroup.style.display = '';
+    if (apiKeyGroup) apiKeyGroup.style.display = '';
+    if (envKeyRow) envKeyRow.style.display = '';
+    document.getElementById('genConfigToggle').style.display = '';
+    document.querySelector('.help-text').style.display = '';
+    document.getElementById('fullCreateToggle').style.display = 'none';
+  }
+}
+
+function switchToFullCreate() {
+  setQuickCreateMode(false);
+  quickCreateGroup = null;
+  document.getElementById('modalTitle').textContent = '添加配置';
+}
+
+// ====== 渲染卡片 ======
 function renderCard(cfg) {
   const activeClass = cfg.enabled ? 'active' : '';
   const badge = cfg.enabled
@@ -252,10 +473,12 @@ function updateActiveIndicator() {
 
 // ====== 添加/编辑模态框 ======
 function openAddModal() {
+  quickCreateGroup = null;
   editMode = null;
   document.getElementById('modalTitle').textContent = '添加配置';
   document.getElementById('modalConfirmBtn').textContent = '添加';
   resetForm();
+  setQuickCreateMode(false);
   document.getElementById('modalOverlay').classList.add('open');
 }
 
@@ -263,9 +486,11 @@ function openEditModal(providerType, index) {
   const cfg = findConfig(providerType, index);
   if (!cfg) return;
 
+  quickCreateGroup = null;
   editMode = { providerType, index };
   document.getElementById('modalTitle').textContent = '编辑配置';
   document.getElementById('modalConfirmBtn').textContent = '保存';
+  setQuickCreateMode(false);
 
   document.getElementById('formName').value = cfg.name;
   document.getElementById('formModelId').value = cfg.id;
@@ -287,6 +512,7 @@ function openEditModal(providerType, index) {
 function closeModal() {
   document.getElementById('modalOverlay').classList.remove('open');
   editMode = null;
+  quickCreateGroup = null;
 }
 
 function resetForm() {
@@ -367,7 +593,7 @@ function confirmModal() {
 }
 
 // ====== 删除模态框 ======
-let deleteTarget = null; // {providerType, index}
+let deleteTarget = null;
 
 function openDeleteModal(providerType, index) {
   const cfg = findConfig(providerType, index);
