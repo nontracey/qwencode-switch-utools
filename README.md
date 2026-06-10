@@ -15,6 +15,15 @@ Qwen Code 配置切换器 — 一个 uTools 插件，用于管理和快速切换
 
 ## 安装
 
+### 方式二：打包安装
+
+```bash
+# 在项目目录下打包 plugin 子目录
+npx asar pack plugin qwenswitch.asar
+```
+
+将 `qwenswitch.asar` 拖入 uTools 插件管理界面安装。
+
 ### 方式一：本地开发模式
 
 1. 克隆仓库
@@ -24,16 +33,7 @@ git clone https://github.com/nontracey/qwencode-switch-utools.git
 ```
 
 2. 打开 uTools → 设置 → 插件 → 开发者工具
-3. 选择「加载本地插件」→ 选择项目目录
-
-### 方式二：打包安装
-
-```bash
-# 在项目目录下打包
-npx asar pack . qwenswitch.asar
-```
-
-将 `qwenswitch.asar` 拖入 uTools 插件管理界面安装。
+3. 选择「加载本地插件」→ 选择项目下的 `plugin` 目录
 
 ## 使用
 
