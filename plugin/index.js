@@ -5,13 +5,11 @@ let editMode = null;    // null = 添加, {providerType, index} = 编辑
 
 // ====== 初始化 ======
 document.addEventListener('DOMContentLoaded', () => {
-  // 等待一小段时间让 preload 准备好
   setTimeout(loadAndRender, 100);
 });
 
 function loadAndRender() {
   if (typeof window.__qwenswitch === 'undefined') {
-    // preload 还没准备好，重试
     setTimeout(loadAndRender, 200);
     return;
   }
@@ -20,12 +18,19 @@ function loadAndRender() {
   renderList();
 }
 
+/**
+ * 通过 providerType + index 精确查找配置
+ * 避免排序/筛选后数组下标错位
+ */
+function findConfig(providerType, index) {
+  return configs.find(c => c.providerType === providerType && c.index === index) || null;
+}
+
 // ====== 渲染配置列表 ======
 function renderList() {
   const searchText = (document.getElementById('searchInput').value || '').toLowerCase();
   const list = document.getElementById('configList');
 
-  // 筛选
   let filtered = configs.filter(c => {
     if (filterMode === 'active' && !c.enabled) return false;
     if (searchText) {
@@ -35,15 +40,12 @@ function renderList() {
     return true;
   });
 
-  // 排序：激活的排最前面，其他按名称
   filtered.sort((a, b) => {
     if (a.enabled !== b.enabled) return a.enabled ? -1 : 1;
     return a.name.localeCompare(b.name);
   });
 
-  // 更新计数
   document.getElementById('configCount').textContent = `${filtered.length}/${configs.length}`;
-  // 重新激活 filter badge 样式
   document.querySelectorAll('.filter-badge').forEach(el => el.classList.remove('active'));
   if (filterMode !== 'all') {
     document.getElementById('countBadge').classList.add('active');
@@ -58,12 +60,11 @@ function renderList() {
     return;
   }
 
-  list.innerHTML = filtered.map((cfg, idx) => renderCard(cfg, idx)).join('');
+  list.innerHTML = filtered.map(cfg => renderCard(cfg)).join('');
 
   // 展开/折叠事件
   document.querySelectorAll('.config-card-header').forEach(el => {
     el.addEventListener('click', (e) => {
-      // 如果点击的是按钮区域，不触发折叠
       if (e.target.closest('.config-actions')) return;
       const card = el.closest('.config-card');
       if (card) card.classList.toggle('expanded');
@@ -75,27 +76,25 @@ function renderList() {
     el.addEventListener('click', (e) => {
       e.stopPropagation();
       const card = el.closest('.config-card');
-      const index = parseInt(card.dataset.index);
       const providerType = card.dataset.provider;
-      const configIdx = findConfigIndex(providerType, index);
-      if (configIdx !== -1) {
-        switchToConfig(configIdx);
-      }
+      const index = parseInt(card.dataset.index);
+      switchToConfig(providerType, index);
     });
   });
 }
 
-function renderCard(cfg, idx) {
+function renderCard(cfg) {
   const activeClass = cfg.enabled ? 'active' : '';
   const badge = cfg.enabled
     ? '<span class="badge active-badge">&#x25CF; 当前</span>'
     : '';
-
-  // 截断过长的 baseUrl 和 apiKey
   const shortUrl = cfg.baseUrl.length > 40 ? cfg.baseUrl.slice(0, 40) + '...' : cfg.baseUrl;
 
+  // 用 data-provider + data-index 精确定位，不再依赖数组下标
+  const key = `'${cfg.providerType}', ${cfg.index}`;
+
   return `
-    <div class="config-card ${activeClass}" data-index="${cfg.index}" data-provider="${cfg.providerType}" data-array-index="${idx}">
+    <div class="config-card ${activeClass}" data-index="${cfg.index}" data-provider="${cfg.providerType}">
       <div class="config-card-header">
         <div class="config-radio ${activeClass}"></div>
         <div class="config-info">
@@ -116,9 +115,9 @@ function renderCard(cfg, idx) {
           </div>
         </div>
         <div class="config-actions">
-          <button class="btn-icon primary" onclick="event.stopPropagation(); openEditModal(${idx})" title="编辑">&#x270E;</button>
-          <button class="btn-icon" onclick="event.stopPropagation(); duplicateConfig(${idx})" title="复制">&#x1F4CB;</button>
-          <button class="btn-icon danger" onclick="event.stopPropagation(); openDeleteModal(${idx})" title="删除">&#x1F5D1;</button>
+          <button class="btn-icon primary" onclick="event.stopPropagation(); openEditModal(${key})" title="编辑">&#x270E;</button>
+          <button class="btn-icon" onclick="event.stopPropagation(); duplicateConfig(${key})" title="复制">&#x1F4CB;</button>
+          <button class="btn-icon danger" onclick="event.stopPropagation(); openDeleteModal(${key})" title="删除">&#x1F5D1;</button>
         </div>
       </div>
       <div class="config-detail">
@@ -169,11 +168,8 @@ function renderCard(cfg, idx) {
 }
 
 // ====== 切换配置 ======
-function switchToConfig(configIdx) {
-  const cfg = configs[configIdx];
-  if (!cfg) return;
-
-  const result = window.__qwenswitch.switchModel(cfg.id);
+function switchToConfig(providerType, index) {
+  const result = window.__qwenswitch.switchModel(providerType, index);
   if (result.success) {
     showToast(`已切换到 ${result.name}`, 'success');
     loadAndRender();
@@ -183,11 +179,8 @@ function switchToConfig(configIdx) {
 }
 
 // ====== 复制配置 ======
-function duplicateConfig(idx) {
-  const cfg = configs[idx];
-  if (!cfg) return;
-
-  const result = window.__qwenswitch.duplicateConfig(cfg.providerType, cfg.index);
+function duplicateConfig(providerType, index) {
+  const result = window.__qwenswitch.duplicateConfig(providerType, index);
   if (result.success) {
     showToast(`已复制为 "${result.config.name}"`, 'success');
     loadAndRender();
@@ -226,11 +219,11 @@ function openAddModal() {
   document.getElementById('modalOverlay').classList.add('open');
 }
 
-function openEditModal(idx) {
-  const cfg = configs[idx];
+function openEditModal(providerType, index) {
+  const cfg = findConfig(providerType, index);
   if (!cfg) return;
 
-  editMode = { providerType: cfg.providerType, index: cfg.index };
+  editMode = { providerType, index };
   document.getElementById('modalTitle').textContent = '编辑配置';
   document.getElementById('modalConfirmBtn').textContent = '保存';
 
@@ -277,7 +270,6 @@ function confirmModal() {
   const baseUrl = document.getElementById('formBaseUrl').value.trim();
   const apiKey = document.getElementById('formApiKey').value.trim();
 
-  // 验证
   if (!name) { showToast('请输入配置名称', 'error'); return; }
   if (!modelId) { showToast('请输入模型 ID', 'error'); return; }
   if (!envKey) { showToast('请输入环境变量名', 'error'); return; }
@@ -296,7 +288,6 @@ function confirmModal() {
   };
 
   if (editMode) {
-    // 编辑模式
     const result = window.__qwenswitch.updateConfig({
       providerType: editMode.providerType,
       index: editMode.index,
@@ -316,7 +307,6 @@ function confirmModal() {
       showToast(result.error, 'error');
     }
   } else {
-    // 添加模式
     const result = window.__qwenswitch.addConfig({
       name,
       modelId,
@@ -337,28 +327,26 @@ function confirmModal() {
 }
 
 // ====== 删除模态框 ======
-let deleteTargetIdx = -1;
+let deleteTarget = null; // {providerType, index}
 
-function openDeleteModal(idx) {
-  const cfg = configs[idx];
+function openDeleteModal(providerType, index) {
+  const cfg = findConfig(providerType, index);
   if (!cfg) return;
 
-  deleteTargetIdx = idx;
+  deleteTarget = { providerType, index };
   document.getElementById('deleteTargetName').textContent = cfg.name;
   document.getElementById('deleteModalOverlay').classList.add('open');
 }
 
 function closeDeleteModal() {
   document.getElementById('deleteModalOverlay').classList.remove('open');
-  deleteTargetIdx = -1;
+  deleteTarget = null;
 }
 
 function confirmDelete() {
-  if (deleteTargetIdx === -1) return;
-  const cfg = configs[deleteTargetIdx];
-  if (!cfg) return;
+  if (!deleteTarget) return;
 
-  const result = window.__qwenswitch.deleteConfig(cfg.providerType, cfg.index);
+  const result = window.__qwenswitch.deleteConfig(deleteTarget.providerType, deleteTarget.index);
   if (result.success) {
     showToast('配置已删除', 'success');
     closeDeleteModal();
@@ -399,10 +387,6 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-function findConfigIndex(providerType, index) {
-  return configs.findIndex(c => c.providerType === providerType && c.index === index);
-}
-
 // 点击遮罩层关闭模态框
 document.getElementById('modalOverlay').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) closeModal();
@@ -411,5 +395,4 @@ document.getElementById('deleteModalOverlay').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) closeDeleteModal();
 });
 
-// 回车键在搜索框中触发搜索
 document.getElementById('searchInput').addEventListener('keyup', () => renderList());

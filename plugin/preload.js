@@ -22,6 +22,49 @@ function writeSettings(settings) {
 // ====== 模型配置管理 ======
 
 /**
+ * 精确匹配当前激活的配置项（providerType + index）
+ * 因为多个配置可能共享同一个 model id（不同端点），
+ * 仅靠 model.name 无法区分，需要结合 generationConfig 匹配
+ */
+function findActiveConfigKey(settings) {
+  if (!settings.model || !settings.model.name) return null;
+  const modelName = settings.model.name;
+  const modelGC = settings.model.generationConfig;
+  const providers = settings.modelProviders || {};
+
+  // 优先匹配 id + generationConfig 完全一致的
+  for (const [providerType, items] of Object.entries(providers)) {
+    if (!Array.isArray(items)) continue;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].id === modelName && genConfigEqual(items[i].generationConfig, modelGC)) {
+        return { providerType, index: i };
+      }
+    }
+  }
+
+  // 降级：仅匹配 id，取第一个
+  for (const [providerType, items] of Object.entries(providers)) {
+    if (!Array.isArray(items)) continue;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].id === modelName) {
+        return { providerType, index: i };
+      }
+    }
+  }
+
+  return null;
+}
+
+function genConfigEqual(a, b) {
+  if (!a || !b) return false;
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * 获取所有模型配置（扁平化列表）
  * 每个配置项包含源 provider 类型和索引
  */
@@ -29,12 +72,15 @@ function getAllConfigs() {
   const settings = readSettings();
   const configs = [];
   const providers = settings.modelProviders || {};
+  const activeKey = findActiveConfigKey(settings);
 
   for (const [providerType, items] of Object.entries(providers)) {
     if (Array.isArray(items)) {
       items.forEach((item, index) => {
         const envValue = (settings.env || {})[item.envKey] || '';
-        const isActive = settings.model && settings.model.name === item.id;
+        const isActive = activeKey
+          && activeKey.providerType === providerType
+          && activeKey.index === index;
         configs.push({
           providerType,
           index,
@@ -57,47 +103,40 @@ function getAllConfigs() {
 
 function getActiveConfig() {
   const settings = readSettings();
-  const activeModelId = settings.model && settings.model.name;
-  const providers = settings.modelProviders || {};
+  const activeKey = findActiveConfigKey(settings);
+  if (!activeKey) return null;
 
-  for (const [, items] of Object.entries(providers)) {
-    if (Array.isArray(items)) {
-      const found = items.find(item => item.id === activeModelId);
-      if (found) {
-        const envValue = (settings.env || {})[found.envKey] || '';
-        return {
-          ...found,
-          providerType: Object.keys(providers).find(k => providers[k] === items),
-          index: items.indexOf(found),
-          apiKey: envValue,
-        };
-      }
-    }
-  }
-  return null;
+  const items = (settings.modelProviders || {})[activeKey.providerType];
+  if (!items || !items[activeKey.index]) return null;
+
+  const found = items[activeKey.index];
+  const envValue = (settings.env || {})[found.envKey] || '';
+  return {
+    ...found,
+    providerType: activeKey.providerType,
+    index: activeKey.index,
+    apiKey: envValue,
+  };
 }
 
 /**
- * 切换激活的模型
+ * 切换激活的模型（按 providerType + index 精确定位）
  */
-function switchModel(configId) {
+function switchModel(providerType, index) {
   const settings = readSettings();
   const providers = settings.modelProviders || {};
-
-  for (const [, items] of Object.entries(providers)) {
-    if (Array.isArray(items)) {
-      const target = items.find(item => item.id === configId);
-      if (target) {
-        settings.model = {
-          name: target.id,
-          generationConfig: target.generationConfig || getDefaultGenConfig(),
-        };
-        writeSettings(settings);
-        return { success: true, name: target.name };
-      }
-    }
+  const items = providers[providerType];
+  if (!items || !items[index]) {
+    return { success: false, error: `未找到配置: ${providerType}[${index}]` };
   }
-  return { success: false, error: `未找到配置: ${configId}` };
+
+  const target = items[index];
+  settings.model = {
+    name: target.id,
+    generationConfig: target.generationConfig || getDefaultGenConfig(),
+  };
+  writeSettings(settings);
+  return { success: true, name: target.name };
 }
 
 /**
@@ -141,9 +180,13 @@ function updateConfig({ providerType, index, name, modelId, envKey, apiKey, base
     return { success: false, error: '未找到配置' };
   }
 
-  // 如果更改了 modelId，需要同时更新 model.name 如果当前正在使用此配置
   const oldItem = items[index];
-  const wasActive = settings.model && settings.model.name === oldItem.id;
+
+  // 如果当前正在使用此配置，需要同步更新 model
+  const activeKey = findActiveConfigKey(settings);
+  const wasActive = activeKey
+    && activeKey.providerType === providerType
+    && activeKey.index === index;
 
   items[index] = {
     ...oldItem,
@@ -179,7 +222,10 @@ function deleteConfig(providerType, index) {
   }
 
   const deleted = items[index];
-  const wasActive = settings.model && settings.model.name === deleted.id;
+  const activeKey = findActiveConfigKey(settings);
+  const wasActive = activeKey
+    && activeKey.providerType === providerType
+    && activeKey.index === index;
 
   items.splice(index, 1);
 
