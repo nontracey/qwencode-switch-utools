@@ -1,0 +1,22 @@
+{
+  "name": "qwenswitch",
+  "version": "1.0.0",
+  "pluginName": "QwenSwitch",
+  "description": "Qwen Code 配置切换器 - 管理并快速切换模型提供商配置",
+  "author": "QwenSwitch",
+  "main": "index.html",
+  "preload": "preload.js",
+  "logo": "logo.png",
+  "features": [
+    {
+      "code": "manage",
+      "explain": "查看、管理并切换 Qwen Code 的模型配置",
+      "cmds": [
+        "qwenswitch",
+        "qwen switch",
+        "Qwen 配置"
+      ]
+    }
+  ],
+  "platform": ["darwin", "win32", "linux"]
+}

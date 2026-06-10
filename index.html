@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QwenSwitch</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container" id="app">
+    <!-- 顶部栏 -->
+    <div class="header">
+      <div class="header-left">
+        <div class="header-icon">QS</div>
+        <div>
+          <div class="header-title">QwenSwitch</div>
+          <div class="header-subtitle">Qwen Code 配置切换器</div>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button class="btn btn-primary" onclick="openAddModal()">+ 添加</button>
+      </div>
+    </div>
+
+    <!-- 当前激活模型 -->
+    <div class="active-indicator" id="activeIndicator">
+      <span class="label">当前模型</span>
+      <span class="model-name" id="activeModelName">-</span>
+      <span class="provider-info" id="activeProviderInfo"></span>
+    </div>
+
+    <!-- 工具栏 -->
+    <div class="toolbar">
+      <div class="search-box">
+        <span class="icon">&#x1F50D;</span>
+        <input type="text" id="searchInput" placeholder="搜索配置..." oninput="renderList()">
+      </div>
+      <span class="filter-badge" id="countBadge" onclick="toggleFilter()">
+        全部 <span class="count" id="configCount">0</span>
+      </span>
+    </div>
+
+    <!-- 配置列表 -->
+    <div class="config-list" id="configList"></div>
+  </div>
+
+  <!-- 添加/编辑模态框 -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title" id="modalTitle">添加配置</span>
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="modalBody">
+        <div class="form-group">
+          <label class="form-label">名称 <span class="required">*</span></label>
+          <input class="form-input" id="formName" placeholder="例如：DeepSeek V4 Flash">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">模型 ID <span class="required">*</span></label>
+            <input class="form-input code" id="formModelId" placeholder="例如：deepseek-v4-flash">
+          </div>
+          <div class="form-group">
+            <label class="form-label">环境变量 Key <span class="required">*</span></label>
+            <input class="form-input code" id="formEnvKey" placeholder="例如：DEEPSEEK_API_KEY">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">API Endpoint <span class="required">*</span></label>
+          <input class="form-input code" id="formBaseUrl" placeholder="https://api.deepseek.com/v1">
+        </div>
+        <div class="form-group">
+          <label class="form-label">API Key <span class="required">*</span></label>
+          <input class="form-input code" id="formApiKey" placeholder="sk-..." type="password">
+          <div class="form-hint">API Key 将存储在 settings.json 的 env 段中</div>
+        </div>
+
+        <!-- 生成参数（折叠） -->
+        <button class="gen-config-toggle" id="genConfigToggle" onclick="toggleGenConfig()">
+          &#x25B6; 高级参数设置
+        </button>
+        <div class="gen-config-panel" id="genConfigPanel">
+          <div class="form-row" style="margin-top: 10px;">
+            <div class="form-group">
+              <label class="form-label">Timeout (ms)</label>
+              <input class="form-input" id="formTimeout" value="120000" type="number">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Max Retries</label>
+              <input class="form-input" id="formMaxRetries" value="3" type="number">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Context Window Size</label>
+            <input class="form-input" id="formContextWindow" value="128000" type="number">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Temperature</label>
+              <input class="form-input" id="formTemperature" value="0.7" type="number" step="0.1" min="0" max="2">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Max Tokens</label>
+              <input class="form-input" id="formMaxTokens" value="8192" type="number">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Top P</label>
+              <input class="form-input" id="formTopP" value="0.9" type="number" step="0.05" min="0" max="1">
+            </div>
+          </div>
+        </div>
+
+        <div class="help-text" style="margin-top: 12px;">
+          配置格式遵循 Qwen Code 的 OpenAI 兼容 provider 规范。
+          添加后将写入 <code>~/.qwen/settings.json</code>。
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal()">取消</button>
+        <button class="btn btn-primary" id="modalConfirmBtn" onclick="confirmModal()">添加</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 删除确认模态框 -->
+  <div class="modal-overlay" id="deleteModalOverlay">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">确认删除</span>
+        <button class="modal-close" onclick="closeDeleteModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="confirm-text">
+          确定要删除配置 <strong id="deleteTargetName"></strong> 吗？此操作不可撤销。
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeDeleteModal()">取消</button>
+        <button class="btn btn-danger" id="deleteConfirmBtn" onclick="confirmDelete()">删除</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="index.js"></script>
+</body>
+</html>
