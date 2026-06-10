@@ -324,12 +324,12 @@ function openQuickAddModal(baseUrl) {
 function setQuickCreateMode(isQuick) {
   const baseUrlGroup = document.getElementById('formBaseUrl').closest('.form-group');
   const apiKeyGroup = document.getElementById('formApiKey').closest('.form-group');
-  const envKeyRow = document.getElementById('formEnvKey').closest('.form-row');
+  const envKeyGroup = document.getElementById('formEnvKey').closest('.form-group');
 
   if (isQuick) {
     if (baseUrlGroup) baseUrlGroup.style.display = 'none';
     if (apiKeyGroup) apiKeyGroup.style.display = 'none';
-    if (envKeyRow) envKeyRow.style.display = 'none';
+    if (envKeyGroup) envKeyGroup.style.display = 'none';
     document.getElementById('genConfigPanel').classList.remove('open');
     document.getElementById('genConfigToggle').style.display = 'none';
     document.querySelector('.help-text').style.display = 'none';
@@ -337,7 +337,7 @@ function setQuickCreateMode(isQuick) {
   } else {
     if (baseUrlGroup) baseUrlGroup.style.display = '';
     if (apiKeyGroup) apiKeyGroup.style.display = '';
-    if (envKeyRow) envKeyRow.style.display = '';
+    if (envKeyGroup) envKeyGroup.style.display = '';
     document.getElementById('genConfigToggle').style.display = '';
     document.querySelector('.help-text').style.display = '';
     document.getElementById('fullCreateToggle').style.display = 'none';
