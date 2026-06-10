@@ -40,9 +40,28 @@ function renderList() {
     return true;
   });
 
-  filtered.sort((a, b) => {
-    if (a.enabled !== b.enabled) return a.enabled ? -1 : 1;
-    return a.name.localeCompare(b.name);
+  // 按端点分组
+  const groups = new Map();
+  filtered.forEach(cfg => {
+    const key = cfg.baseUrl;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(cfg);
+  });
+
+  // 组内排序：激活的排最前，其余按名称
+  for (const [, items] of groups) {
+    items.sort((a, b) => {
+      if (a.enabled !== b.enabled) return a.enabled ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+  }
+
+  // 组间排序：包含激活配置的组排最前，其余按端点 URL
+  const sortedGroups = [...groups.entries()].sort((a, b) => {
+    const aActive = a[1].some(c => c.enabled);
+    const bActive = b[1].some(c => c.enabled);
+    if (aActive !== bActive) return aActive ? -1 : 1;
+    return a[0].localeCompare(b[0]);
   });
 
   document.getElementById('configCount').textContent = `${filtered.length}/${configs.length}`;
@@ -60,7 +79,21 @@ function renderList() {
     return;
   }
 
-  list.innerHTML = filtered.map(cfg => renderCard(cfg)).join('');
+  list.innerHTML = sortedGroups.map(([baseUrl, items]) => {
+    const groupLabel = baseUrl.replace(/^https?:\/\//, '').replace(/\/v\d+$/, '');
+    const hasActive = items.some(c => c.enabled);
+    return `
+      <div class="config-group ${hasActive ? 'has-active' : ''}">
+        <div class="config-group-header">
+          <span class="group-icon">&#x1F310;</span>
+          <span class="group-label">${escapeHtml(groupLabel)}</span>
+          <span class="group-count">${items.length}</span>
+        </div>
+        <div class="config-group-list">
+          ${items.map(cfg => renderCard(cfg)).join('')}
+        </div>
+      </div>`;
+  }).join('');
 
   // 展开/折叠事件
   document.querySelectorAll('.config-card-header').forEach(el => {
@@ -102,7 +135,6 @@ function renderCard(cfg) {
   const badge = cfg.enabled
     ? '<span class="badge active-badge">&#x25CF; 当前</span>'
     : '';
-  const shortUrl = cfg.baseUrl.length > 40 ? cfg.baseUrl.slice(0, 40) + '...' : cfg.baseUrl;
 
   return `
     <div class="config-card ${activeClass}" data-index="${cfg.index}" data-provider="${escapeHtml(cfg.providerType)}">
@@ -116,9 +148,6 @@ function renderCard(cfg) {
           <div class="config-meta">
             <span class="meta-item">
               <span class="meta-key">模型</span> ${escapeHtml(cfg.id)}
-            </span>
-            <span class="meta-item">
-              <span class="meta-key">端点</span> ${escapeHtml(shortUrl)}
             </span>
             <span class="meta-item">
               <span class="meta-key">Key</span> ${escapeHtml(cfg.apiKey || '未设置')}

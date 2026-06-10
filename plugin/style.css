@@ -197,7 +197,79 @@ body {
 .config-list {
   display: flex;
   flex-direction: column;
+  gap: 20px;
+}
+
+/* ====== 端点分组 ====== */
+.config-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.config-group.has-active {
+  border-color: rgba(81, 207, 102, 0.3);
+}
+
+.config-group-header {
+  display: flex;
+  align-items: center;
   gap: 8px;
+  padding: 10px 16px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+}
+
+.config-group-header .group-icon {
+  font-size: 13px;
+  opacity: 0.7;
+}
+
+.config-group-header .group-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  letter-spacing: 0.3px;
+}
+
+.has-active .config-group-header .group-label {
+  color: var(--success);
+}
+
+.config-group-header .group-count {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  padding: 1px 8px;
+  border-radius: 10px;
+}
+
+.config-group-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.config-group-list .config-card {
+  border: none;
+  border-radius: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.config-group-list .config-card:last-child {
+  border-bottom: none;
+}
+
+.config-group-list .config-card:hover {
+  border-color: rgba(108, 92, 231, 0.3);
+  border-bottom-color: rgba(108, 92, 231, 0.3);
+}
+
+.config-group-list .config-card.active {
+  border-color: transparent;
+  border-bottom-color: var(--border);
 }
 
 .config-card {
